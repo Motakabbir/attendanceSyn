@@ -12,54 +12,56 @@ class SupabaseWriter:
             logger.error(f"Failed to connect to Supabase: {e}")
             raise
 
-    def get_employee_mappings(self):
-        try:
-            response = self.client.table('employees').select('id, attendance_device_id').execute()
-            mappings = {str(row['attendance_device_id']): row['id'] for row in response.data}
-            logger.info(f"Loaded {len(mappings)} employee mappings")
-            return mappings
-        except Exception as e:
-            logger.error(f"Failed to get employee mappings: {e}")
-            raise
-
     def upsert_records(self, records):
-        mappings = self.get_employee_mappings()
-        # Group records by employee and date to aggregate in/out times
-        grouped = {}
+        # Transform records to list of dicts for raw attendance logs
+        data = []
         for record in records:
-            employee_uuid = mappings.get(str(record['employeeID']))
-            if not employee_uuid:
-                logger.warning(f"No mapping found for employeeID {record['employeeID']}, skipping")
-                continue
-            date_str = record['authDate'].isoformat() if record['authDate'] else None
-            if not date_str:
-                continue
-            key = (employee_uuid, date_str)
-            if key not in grouped:
-                grouped[key] = {
-                    'employee_id': employee_uuid,
-                    'date': date_str,
-                    'office_in_time': None,
-                    'office_out_time': None,
-                    'created_at': datetime.now().isoformat(),
-                    'updated_at': datetime.now().isoformat()
-                }
-            # Update in/out times based on direction
-            if record['direction'].lower() == 'in' and record['authTime']:
-                grouped[key]['office_in_time'] = record['authTime'].isoformat()
-            elif record['direction'].lower() == 'out' and record['authTime']:
-                grouped[key]['office_out_time'] = record['authTime'].isoformat()
-        data = list(grouped.values())
-        if not data:
-            logger.info("No valid records to upsert after grouping")
-            return
+            def serialize_datetime(value):
+                if hasattr(value, 'isoformat'):
+                    return value.isoformat()
+                elif isinstance(value, str):
+                    return value
+                else:
+                    return str(value) if value else None
+            
+            # Handle direction field - convert to int or None
+            direction_value = record.get('direction')
+            if direction_value == '' or direction_value is None:
+                direction_value = None
+            else:
+                try:
+                    direction_value = int(direction_value)
+                except (ValueError, TypeError):
+                    direction_value = None
+
+            transformed = {
+                'authDate': serialize_datetime(record.get('authDate')),
+                'direction': direction_value,
+                'employeeID': record['employeeID'],
+                'personName': record['personName'],
+                'authDateTime': serialize_datetime(record.get('authDateTime')),
+                'deviceName': record['deviceName'],
+                'authTime': serialize_datetime(record.get('authTime')),
+                'cardNo': record['cardNo'],
+                'deviceSn': record['deviceSn']
+            }
+            data.append(transformed)
         try:
-            response = self.client.table('attendance_records').upsert(
+            response = self.client.table('attendance_logs').upsert(
                 data,
-                on_conflict='employee_id,date'
+                on_conflict='employeeID,authDateTime,deviceSn'
             ).execute()
-            logger.info(f"Upserted {len(data)} records to Supabase")
+            logger.info(f"Upserted {len(records)} records to Supabase")
             return response
         except Exception as e:
             logger.error(f"Failed to upsert records: {e}")
             raise
+
+    def select_table(self):
+        try:
+            response = self.client.table('attendance_logs').select('*').execute()
+            logger.info(f"Selected records from attendance_logs: {response.data}")
+            return response.data
+        except Exception as e:
+            logger.error(f"Failed to select from table: {e}")
+            return []

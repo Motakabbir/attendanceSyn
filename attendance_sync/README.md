@@ -30,23 +30,19 @@ ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMES
 ```
 
 ### Supabase Setup
-1. Create `employees` table:
+1. Create `attendance_logs` table:
    ```sql
-   CREATE TABLE employees (
-       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-       attendance_device_id VARCHAR(50)
-   );
-   ```
-2. Create `attendance_records` table:
-   ```sql
-   CREATE TABLE attendance_records (
-       employee_id UUID REFERENCES employees(id),
-       date DATE,
-       office_in_time TIME,
-       office_out_time TIME,
-       created_at TIMESTAMP DEFAULT NOW(),
-       updated_at TIMESTAMP DEFAULT NOW(),
-       UNIQUE (employee_id, date)
+   CREATE TABLE attendance_logs (
+       employeeID VARCHAR(50),
+       authDateTime TIMESTAMP,
+       authDate DATE,
+       authTime TIME,
+       direction VARCHAR(10),
+       deviceName VARCHAR(100),
+       deviceSn VARCHAR(50),
+       personName VARCHAR(100),
+       cardNo VARCHAR(50),
+       UNIQUE (employeeID, authDateTime, deviceSn)
    );
    ```
 

@@ -19,6 +19,8 @@ signal.signal(signal.SIGTERM, signal_handler)
 def sync():
     reader = MySQLReader()
     writer = SupabaseWriter()
+    existing_records = writer.select_table()
+    # Now proceed with sync
 
     while running:
         try:
