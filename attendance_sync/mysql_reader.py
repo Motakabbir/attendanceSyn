@@ -1,24 +1,25 @@
-import mysql.connector
+import pymysql
 from config import MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE
 from logger import logger
 
 class MySQLReader:
     def __init__(self):
         try:
-            self.conn = mysql.connector.connect(
+            self.conn = pymysql.connect(
                 host=MYSQL_HOST,
                 port=MYSQL_PORT,
                 user=MYSQL_USER,
                 password=MYSQL_PASSWORD,
-                database=MYSQL_DATABASE
+                database=MYSQL_DATABASE,
+                connect_timeout=5
             )
             logger.info("Connected to MySQL database")
-        except mysql.connector.Error as e:
+        except pymysql.Error as e:
             logger.error(f"Failed to connect to MySQL: {e}")
             raise
 
     def get_unsynced_records(self):
-        cursor = self.conn.cursor(dictionary=True)
+        cursor = self.conn.cursor(pymysql.cursors.DictCursor)
         query = """
         SELECT employeeID, authDateTime, authDate, authTime, direction, deviceName, deviceSn, personName, cardNo
         FROM attlog
