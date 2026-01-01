@@ -4,6 +4,9 @@ from logger import logger
 
 class MySQLReader:
     def __init__(self):
+        self.connect()
+
+    def connect(self):
         try:
             self.conn = pymysql.connect(
                 host=MYSQL_HOST,
@@ -11,14 +14,23 @@ class MySQLReader:
                 user=MYSQL_USER,
                 password=MYSQL_PASSWORD,
                 database=MYSQL_DATABASE,
-                connect_timeout=5
+                connect_timeout=5,
+                autocommit=True  # Enable autocommit to see new data
             )
             logger.info("Connected to MySQL database")
         except pymysql.Error as e:
             logger.error(f"Failed to connect to MySQL: {e}")
             raise
 
+    def ensure_connection(self):
+        """Reconnect if connection is lost"""
+        try:
+            self.conn.ping(reconnect=True)
+        except pymysql.Error:
+            self.connect()
+
     def get_unsynced_records(self):
+        self.ensure_connection()
         cursor = self.conn.cursor(pymysql.cursors.DictCursor)
         query = """
         SELECT employeeID, authDateTime, authDate, authTime, direction, deviceName, deviceSn, personName, cardNo
@@ -31,6 +43,7 @@ class MySQLReader:
         return records
 
     def mark_synced(self, records):
+        self.ensure_connection()
         cursor = self.conn.cursor()
         for record in records:
             cursor.execute("""
