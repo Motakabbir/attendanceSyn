@@ -12,7 +12,7 @@ class SupabaseWriter:
             logger.error(f"Failed to connect to Supabase: {e}")
             raise
 
-    def upsert_records(self, records):
+    def upsert_records(self, records, batch_size=100):
         # Transform records to list of dicts for raw attendance logs
         data = []
         for record in records:
@@ -23,7 +23,7 @@ class SupabaseWriter:
                     return value
                 else:
                     return str(value) if value else None
-            
+
             # Handle direction field - convert to int or None
             direction_value = record.get('direction')
             if direction_value == '' or direction_value is None:
@@ -46,16 +46,32 @@ class SupabaseWriter:
                 'deviceSn': record['deviceSn']
             }
             data.append(transformed)
-        try:
-            response = self.client.table('attendance_logs').upsert(
-                data,
-                on_conflict='employeeID,authDateTime,deviceSn'
-            ).execute()
-            logger.info(f"Upserted {len(records)} records to Supabase")
-            return response
-        except Exception as e:
-            logger.error(f"Failed to upsert records: {e}")
-            raise
+
+        # Deduplicate by (employeeID, authDateTime, deviceSn)
+        unique = {}
+        for item in data:
+            key = (item['employeeID'], item['authDateTime'], item['deviceSn'])
+            if key not in unique:
+                unique[key] = item
+        deduped_data = list(unique.values())
+
+        # Batch upsert
+        total = len(deduped_data)
+        responses = []
+        for i in range(0, total, batch_size):
+            batch = deduped_data[i:i+batch_size]
+            try:
+                response = self.client.table('attendance_logs').upsert(
+                    batch,
+                    on_conflict='employeeID,authDateTime,deviceSn'
+                ).execute()
+                logger.info(f"Upserted batch {i//batch_size+1}: {len(batch)} records to Supabase")
+                responses.append(response)
+            except Exception as e:
+                logger.error(f"Failed to upsert batch {i//batch_size+1}: {e}")
+                raise
+        logger.info(f"Upserted {total} records to Supabase in {((total-1)//batch_size)+1} batches.")
+        return responses
 
     def select_table(self):
         try:
