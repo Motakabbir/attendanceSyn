@@ -1,12 +1,12 @@
-from supabase import create_client, Client
-from config import SUPABASE_URL, SUPABASE_KEY
+from supabase import create_client, Client, ClientOptions
+from config import SUPABASE_URL, SUPABASE_KEY, SUPABASE_SERVICE_ROLE_KEY
 from logger import logger
 from datetime import datetime
 
 class SupabaseWriter:
     def __init__(self):
         try:
-            self.client: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+            self.client: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
             logger.info("Connected to Supabase")
         except Exception as e:
             logger.error(f"Failed to connect to Supabase: {e}")
@@ -64,7 +64,7 @@ class SupabaseWriter:
                 response = self.client.table('attendance_logs').upsert(
                     batch,
                     on_conflict='employeeID,authDateTime,deviceSn'
-                ).execute()
+                ).execute(headers={"Prefer": "resolution=merge-duplicates"})
                 logger.info(f"Upserted batch {i//batch_size+1}: {len(batch)} records to Supabase")
                 responses.append(response)
             except Exception as e:
@@ -81,3 +81,12 @@ class SupabaseWriter:
         except Exception as e:
             logger.error(f"Failed to select from table: {e}")
             return []
+
+    def debug_auth_context(self):
+        try:
+            response = self.client.rpc('debug_auth_context').execute()
+            logger.info(f"Debug auth context: {response.data}")
+            return response.data
+        except Exception as e:
+            logger.error(f"Failed to call debug_auth_context: {e}")
+            return None
